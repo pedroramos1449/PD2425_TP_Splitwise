@@ -76,8 +76,10 @@ public class MainServer {
                 while ((inputLine = in.readLine()) != null) {
                     System.out.println("Mensagem do cliente: " + inputLine);
 
-                    // Handle client commands
-                    if (inputLine.startsWith("REGISTER:")) {
+                    // Lista de comandos dependendo do input do usuario no cliente
+                    if (inputLine.startsWith("CREATE_GROUP")) {
+                        handleCreateGroupCommand(inputLine.substring(13), out);
+                    } else if(inputLine.startsWith("REGISTER:")) {
                         handleRegisterCommand(inputLine.substring(9), out);
                     } else if (inputLine.startsWith("LOGIN:")) {
                         handleLoginCommand(inputLine.substring(6), out);
@@ -111,7 +113,7 @@ public class MainServer {
                 boolean success = database.registerUser(nome, email, telefone, senha);
                 out.println(success ? "REGISTRATION_SUCCESS" : "REGISTRATION_FAILED");
             } else {
-                out.println("Invalid format. Use: REGISTER:name,email,phone,password");
+                out.println("Formato Invalido. Use: REGISTER:name,email,phone,password");
             }
         }
 
@@ -123,7 +125,7 @@ public class MainServer {
                 boolean success = database.authenticateUser(email, senha);
                 out.println(success ? "LOGIN_SUCCESS" : "INVALID_CREDENTIALS");
             } else {
-                out.println("Invalid format. Use: LOGIN:email,password");
+                out.println("Formato Invalido. Use: LOGIN:email,password");
             }
         }
 
@@ -138,11 +140,35 @@ public class MainServer {
                     boolean success = database.editUserData(userId, newNome, newTelefone, newSenha);
                     out.println(success ? "EDIT_SUCCESS" : "EDIT_FAILED");
                 } catch (NumberFormatException e) {
-                    out.println("Invalid user ID. Must be an integer.");
+                    out.println("ID de usuario invalido. Tem que ser uma integer.");
                 }
             } else {
-                out.println("Invalid format. Use: EDIT:id,newName,newPhone,newPassword");
+                out.println("Formato Invalido. Use: EDIT:id,newName,newPhone,newPassword");
             }
         }
+
+        private void handleCreateGroupCommand(String data, PrintWriter out) {
+            String[] parts = data.split(",", 2);
+            if (parts.length == 2) {
+                try {
+                    int userId = Integer.parseInt(parts[0]);
+                    String groupName = parts[1];
+
+                    // Check if the group was created successfully
+                    boolean success = database.createGroup(groupName, userId);
+                    if (success) {
+                        out.println("GROUP_CREATION_SUCCESS");
+                    } else {
+                        out.println("GROUP_CREATION_FAILED: Um grupo com esse nome ja existe.");
+                    }
+                } catch (NumberFormatException e) {
+                    out.println("ID de usuario invalido. Tem que ser uma integer.");
+                }
+            } else {
+                out.println("Formato Invalido. Use: CREATE_GROUP:userId,groupName");
+            }
+        }
+
+
     }
 }

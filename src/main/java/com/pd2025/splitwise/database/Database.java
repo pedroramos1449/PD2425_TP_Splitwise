@@ -90,10 +90,10 @@ public class Database {
             pstmt.setString(3, telefone);
             pstmt.setString(4, senha);
             pstmt.executeUpdate();
-            System.out.println("User registered successfully: " + email);
+            System.out.println("Usuario registrado com sucesso: " + email);
             return true;
         } catch (SQLException e) {
-            System.err.println("Error registering user: " + e.getMessage());
+            System.err.println("Erro ao registrar o usuario: " + e.getMessage());
             return false;
         }
     }
@@ -105,15 +105,15 @@ public class Database {
             pstmt.setString(2, senha);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    System.out.println("User authenticated successfully: " + email);
+                    System.out.println("Usuario autenticado com sucesso: " + email);
                     return true;
                 } else {
-                    System.out.println("Invalid email or password: " + email);
+                    System.out.println("Email ou senha invalido: " + email);
                     return false;
                 }
             }
         } catch (SQLException e) {
-            System.err.println("Error authenticating user: " + e.getMessage());
+            System.err.println("Erro ao autenticar o usuario: " + e.getMessage());
             return false;
         }
     }
@@ -127,14 +127,42 @@ public class Database {
             pstmt.setInt(4, userId);
             int rowsUpdated = pstmt.executeUpdate();
             if (rowsUpdated > 0) {
-                System.out.println("User data updated successfully for ID: " + userId);
+                System.out.println("Informacao de usuario mudada com sucesso para o ID: " + userId);
                 return true;
             } else {
-                System.out.println("No user found with ID: " + userId);
+                System.out.println("Nao a usuarios com o ID: " + userId);
                 return false;
             }
         } catch (SQLException e) {
-            System.err.println("Error updating user data: " + e.getMessage());
+            System.err.println("Erro mudando informacoes do usuario: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean createGroup(String groupName, int userId) {
+        try {
+            // Check se o nome do grupo eh unico
+            String checkQuery = "SELECT COUNT(*) FROM grupos WHERE nome = ?";
+            try (PreparedStatement checkStmt = connection.prepareStatement(checkQuery)) {
+                checkStmt.setString(1, groupName);
+                ResultSet rs = checkStmt.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    return false; // Group name already exists
+                }
+            }
+
+            // Introduz o novo grupo
+            String insertQuery = "INSERT INTO grupos (nome, id_utilizador_criador) VALUES (?, ?)";
+            try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery)) {
+                insertStmt.setString(1, groupName);
+                insertStmt.setInt(2, userId);
+                insertStmt.executeUpdate();
+            }
+
+            return true;
+
+        } catch (SQLException e) {
+            System.err.println("Erro ao criar grupo: " + e.getMessage());
             return false;
         }
     }
