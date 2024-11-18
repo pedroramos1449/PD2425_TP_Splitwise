@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS despesas (
                                         descricao TEXT,
                                         data TEXT NOT NULL,
                                         FOREIGN KEY (id_grupo) REFERENCES grupos(id),
-    FOREIGN KEY (id_utilizador_pagador) REFERENCES utilizadores(id)
+                                        FOREIGN KEY (id_utilizador_pagador) REFERENCES utilizadores(id)
     );
 
 CREATE TABLE IF NOT EXISTS versao_bd (

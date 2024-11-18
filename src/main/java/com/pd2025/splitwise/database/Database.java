@@ -82,5 +82,62 @@ public class Database {
         }
     }
 
+    public boolean registerUser(String nome, String email, String telefone, String senha) {
+        String sql = "INSERT INTO utilizadores (nome, email, telefone, senha) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, nome);
+            pstmt.setString(2, email);
+            pstmt.setString(3, telefone);
+            pstmt.setString(4, senha);
+            pstmt.executeUpdate();
+            System.out.println("User registered successfully: " + email);
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Error registering user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean authenticateUser(String email, String senha) {
+        String sql = "SELECT id FROM utilizadores WHERE email = ? AND senha = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            pstmt.setString(2, senha);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    System.out.println("User authenticated successfully: " + email);
+                    return true;
+                } else {
+                    System.out.println("Invalid email or password: " + email);
+                    return false;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error authenticating user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean editUserData(int userId, String newNome, String newTelefone, String newSenha) {
+        String sql = "UPDATE utilizadores SET nome = ?, telefone = ?, senha = ? WHERE id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, newNome);
+            pstmt.setString(2, newTelefone);
+            pstmt.setString(3, newSenha);
+            pstmt.setInt(4, userId);
+            int rowsUpdated = pstmt.executeUpdate();
+            if (rowsUpdated > 0) {
+                System.out.println("User data updated successfully for ID: " + userId);
+                return true;
+            } else {
+                System.out.println("No user found with ID: " + userId);
+                return false;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error updating user data: " + e.getMessage());
+            return false;
+        }
+    }
+
     // Métodos adicionais para operações de CRUD
 }

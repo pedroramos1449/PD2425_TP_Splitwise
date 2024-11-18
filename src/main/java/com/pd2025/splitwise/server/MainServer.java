@@ -68,7 +68,6 @@ public class MainServer {
             this.clientSocket = socket;
         }
 
-        @Override
         public void run() {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                  PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
@@ -76,11 +75,19 @@ public class MainServer {
                 String inputLine;
                 while ((inputLine = in.readLine()) != null) {
                     System.out.println("Mensagem do cliente: " + inputLine);
-                    out.println("Servidor: Mensagem recebida - " + inputLine);
 
-                    if ("sair".equalsIgnoreCase(inputLine)) {
+                    // Handle client commands
+                    if (inputLine.startsWith("REGISTER:")) {
+                        handleRegisterCommand(inputLine.substring(9), out);
+                    } else if (inputLine.startsWith("LOGIN:")) {
+                        handleLoginCommand(inputLine.substring(6), out);
+                    } else if (inputLine.startsWith("EDIT:")) {
+                        handleEditCommand(inputLine.substring(5), out);
+                    } else if ("sair".equalsIgnoreCase(inputLine)) {
                         System.out.println("Cliente desconectado.");
                         break;
+                    } else {
+                        out.println("Comando desconhecido.");
                     }
                 }
             } catch (IOException e) {
@@ -91,6 +98,50 @@ public class MainServer {
                 } catch (IOException e) {
                     System.err.println("Erro ao fechar o socket do cliente: " + e.getMessage());
                 }
+            }
+        }
+
+        private void handleRegisterCommand(String data, PrintWriter out) {
+            String[] parts = data.split(",");
+            if (parts.length == 4) {
+                String nome = parts[0];
+                String email = parts[1];
+                String telefone = parts[2];
+                String senha = parts[3];
+                boolean success = database.registerUser(nome, email, telefone, senha);
+                out.println(success ? "REGISTRATION_SUCCESS" : "REGISTRATION_FAILED");
+            } else {
+                out.println("Invalid format. Use: REGISTER:name,email,phone,password");
+            }
+        }
+
+        private void handleLoginCommand(String data, PrintWriter out) {
+            String[] parts = data.split(",");
+            if (parts.length == 2) {
+                String email = parts[0];
+                String senha = parts[1];
+                boolean success = database.authenticateUser(email, senha);
+                out.println(success ? "LOGIN_SUCCESS" : "INVALID_CREDENTIALS");
+            } else {
+                out.println("Invalid format. Use: LOGIN:email,password");
+            }
+        }
+
+        private void handleEditCommand(String data, PrintWriter out) {
+            String[] parts = data.split(",");
+            if (parts.length == 4) {
+                try {
+                    int userId = Integer.parseInt(parts[0]);
+                    String newNome = parts[1];
+                    String newTelefone = parts[2];
+                    String newSenha = parts[3];
+                    boolean success = database.editUserData(userId, newNome, newTelefone, newSenha);
+                    out.println(success ? "EDIT_SUCCESS" : "EDIT_FAILED");
+                } catch (NumberFormatException e) {
+                    out.println("Invalid user ID. Must be an integer.");
+                }
+            } else {
+                out.println("Invalid format. Use: EDIT:id,newName,newPhone,newPassword");
             }
         }
     }
