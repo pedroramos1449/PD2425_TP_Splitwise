@@ -1,9 +1,6 @@
 package com.pd2025.splitwise.database;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.ArrayList;
@@ -33,7 +30,7 @@ public class Database {
     public void initializeDatabase() {
         try {
             if (isDatabaseEmpty()) {
-                executeSQLScript("...\\src\\main\\resources\\init.sql"); // Caminho do init.sql
+                executeSQLScript("C:\\Users\\André\\Desktop\\PD2425_TP_Splitwise-master\\src\\main\\resources\\init.sql"); // Caminho do init.sql
                 System.out.println("Base de dados inicializada com o script init.sql.");
             } else {
                 System.out.println("Base de dados já inicializada.");
@@ -73,8 +70,17 @@ public class Database {
         }
     }
 
+    public boolean ValidaTelefone(String telefone)
+    {
+        return telefone.matches("\\d+");
+    }
+
     public boolean registerUser(String nome, String email, String telefone, String senha) {
         String sql = "INSERT INTO utilizadores (nome, email, telefone, senha) VALUES (?, ?, ?, ?)";
+        if (!ValidaTelefone(telefone)) {
+            System.out.println("Telefone inválido. Apenas números são permitidos.");
+            return false;
+        }
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, nome);
             pstmt.setString(2, email);
@@ -132,34 +138,37 @@ public class Database {
         }
     }
 
-    public boolean createGroup(String groupName, int userId) {
-        try {
-            // Check se o nome do grupo eh unico
-            String checkQuery = "SELECT COUNT(*) FROM grupos WHERE nome = ?";
-            try (PreparedStatement checkStmt = connection.prepareStatement(checkQuery)) {
-                checkStmt.setString(1, groupName);
-                ResultSet rs = checkStmt.executeQuery();
-                if (rs.next() && rs.getInt(1) > 0) {
-                    return false; // Group name already exists
+        public boolean createGroup(String groupName, int userId) {
+            try {
+                // Check se o nome do grupo é unico
+                String checkQuery = "SELECT COUNT(*) FROM grupos WHERE nome = ?";
+                try (PreparedStatement checkStmt = connection.prepareStatement(checkQuery)) {
+                    checkStmt.setString(1, groupName);
+                    ResultSet rs = checkStmt.executeQuery();
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        return false; // Group name already exists
+                    }
                 }
+
+                // Introduz o novo grupo
+                String insertQuery = "INSERT INTO grupos (nome, id_utilizador_criador) VALUES (?, ?)";
+                try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery)) {
+                    insertStmt.setString(1, groupName);
+                    insertStmt.setInt(2, userId);
+                    insertStmt.executeUpdate();
+                }
+                int groupID = getGroupID(groupName);
+                String mail = getUserEmail(userId);
+                addMemberToGroup(groupID,mail,userId);
+
+                incrementDatabaseVersion();
+                return true;
+
+            } catch (SQLException e) {
+                System.err.println("Erro ao criar grupo: " + e.getMessage());
+                return false;
             }
-
-            // Introduz o novo grupo
-            String insertQuery = "INSERT INTO grupos (nome, id_utilizador_criador) VALUES (?, ?)";
-            try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery)) {
-                insertStmt.setString(1, groupName);
-                insertStmt.setInt(2, userId);
-                insertStmt.executeUpdate();
-            }
-
-            incrementDatabaseVersion();
-            return true;
-
-        } catch (SQLException e) {
-            System.err.println("Erro ao criar grupo: " + e.getMessage());
-            return false;
         }
-    }
 
     public List<String> listGroupsForUser(int userId) {
         String sql = "SELECT g.nome FROM grupos g JOIN membros m ON g.id = m.id_grupo WHERE m.id_utilizador = ?";
@@ -267,6 +276,37 @@ public class Database {
         return details.length() > 0 ? details.toString() : null;
     }
 
+    public int getGroupID(String nome) {
+        String sql = "SELECT id FROM grupos WHERE nome = ?";
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, nome);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("id"); 
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao obter o ID do grupo: " + e.getMessage());
+        }
+        return -1;  
+    }
+
+    public String getUserEmail(int userId) {
+        String sql = "SELECT email FROM utilizadores WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, userId); 
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("email");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao buscar e-mail: " + e.getMessage());
+        }
+        return null;
+    }
+
     /// DB Versioning
 
     // Retorna a versão da base de dados
@@ -290,5 +330,7 @@ public class Database {
             System.err.println("Erro ao incrementar versão da base de dados: " + e.getMessage());
         }
     }
+
+
     // Métodos adicionais para operações de CRUD
 }
