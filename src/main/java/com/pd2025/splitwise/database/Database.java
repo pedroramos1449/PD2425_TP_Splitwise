@@ -140,32 +140,109 @@ public class Database {
     }
 
     public boolean createGroup(String groupName, int userId) {
+        if (connection == null) {
+            System.err.println("Conexão com o banco de dados não foi estabelecida.");
+            return false;
+        }
+
         try {
-            // Check se o nome do grupo eh unico
-            String checkQuery = "SELECT COUNT(*) FROM grupos WHERE nome = ?";
+            connection.setAutoCommit(false); // Start transaction
+
+            // Normalize input
+            groupName = groupName.trim();
+
+            // Check if the group name is unique (case-insensitive)
+            String checkQuery = "SELECT COUNT(*) FROM grupos WHERE LOWER(nome) = LOWER(?)";
             try (PreparedStatement checkStmt = connection.prepareStatement(checkQuery)) {
                 checkStmt.setString(1, groupName);
                 ResultSet rs = checkStmt.executeQuery();
                 if (rs.next() && rs.getInt(1) > 0) {
+                    System.out.println("Group name already exists: " + groupName);
                     return false; // Group name already exists
                 }
             }
 
-            // Introduz o novo grupo
-            String insertQuery = "INSERT INTO grupos (nome, id_utilizador_criador) VALUES (?, ?)";
-            try (PreparedStatement insertStmt = connection.prepareStatement(insertQuery)) {
-                insertStmt.setString(1, groupName);
-                insertStmt.setInt(2, userId);
-                insertStmt.executeUpdate();
+            // Insert the new group
+            String insertGroupQuery = "INSERT INTO grupos (nome, id_utilizador_criador) VALUES (?, ?)";
+            try (PreparedStatement insertGroupStmt = connection.prepareStatement(insertGroupQuery, Statement.RETURN_GENERATED_KEYS)) {
+                insertGroupStmt.setString(1, groupName);
+                insertGroupStmt.setInt(2, userId);
+                insertGroupStmt.executeUpdate();
+
+                // Get the generated group ID
+                ResultSet generatedKeys = insertGroupStmt.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    int groupId = generatedKeys.getInt(1);
+
+                    // Add the creator to the group
+                    String insertMembershipQuery = "INSERT INTO grupo_utilizadores (id_grupo, id_utilizador) VALUES (?, ?)";
+                    try (PreparedStatement insertMembershipStmt = connection.prepareStatement(insertMembershipQuery)) {
+                        insertMembershipStmt.setInt(1, groupId);
+                        insertMembershipStmt.setInt(2, userId);
+                        insertMembershipStmt.executeUpdate();
+                    }
+                }
             }
 
+            connection.commit(); // Commit transaction
+            System.out.println("Group created successfully: " + groupName);
             return true;
 
         } catch (SQLException e) {
+            try {
+                connection.rollback(); // Rollback in case of an error
+            } catch (SQLException rollbackEx) {
+                System.err.println("Erro ao reverter transação: " + rollbackEx.getMessage());
+            }
             System.err.println("Erro ao criar grupo: " + e.getMessage());
+            return false;
+        } finally {
+            try {
+                connection.setAutoCommit(true); // Reset auto-commit
+            } catch (SQLException autoCommitEx) {
+                System.err.println("Erro ao redefinir auto-commit: " + autoCommitEx.getMessage());
+            }
+        }
+    }
+
+    public boolean isUserInGroup(int groupId, int userId) {
+        if (connection == null) {
+            System.err.println("Conexão com o banco de dados não foi estabelecida.");
+            return false;
+        }
+
+        String query = "SELECT COUNT(*) FROM grupo_utilizadores WHERE id_grupo = ? AND id_utilizador = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+
+            stmt.setInt(1, groupId);
+            stmt.setInt(2, userId);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next() && rs.getInt(1) > 0;
+
+        } catch (SQLException e) {
+            System.err.println("Erro ao verificar se o utilizador pertence ao grupo: " + e.getMessage());
             return false;
         }
     }
 
+    public int authenticateUserAndGetId(String email, String senha) {
+        String sql = "SELECT id FROM utilizadores WHERE email = ? AND senha = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            pstmt.setString(2, senha);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    System.out.println("Usuario autenticado com sucesso: " + email);
+                    return rs.getInt("id"); // Return the user's ID
+                } else {
+                    System.out.println("Email ou senha invalido: " + email);
+                    return -1; // Return -1 to indicate failure
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao autenticar o usuario: " + e.getMessage());
+            return -1; // Return -1 in case of an error
+        }
+    }
     // Métodos adicionais para operações de CRUD
 }
