@@ -65,6 +65,7 @@ public class MainServer {
     static class ClientHandler implements Runnable {
         private Socket clientSocket;
         private int authenticatedUserID = -1;
+        private int SelectedGroupID = -1;
         public ClientHandler(Socket socket) {
             this.clientSocket = socket;
         }
@@ -72,39 +73,77 @@ public class MainServer {
         public void run() {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                  PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-
                 String inputLine;
                 while ((inputLine = in.readLine()) != null) {
                     System.out.println("Mensagem do cliente: " + inputLine);
-
                     // Lista de comandos dependendo do input do usuario no cliente
-                    if(inputLine.startsWith("REGISTER:")) {
-                        handleRegisterCommand(inputLine.substring(9), out);
-                    } else if (inputLine.startsWith("LOGIN:")) {
-                        handleLoginCommand(inputLine.substring(6), out);
-                    } else if ("sair".equalsIgnoreCase(inputLine)) {
-                        authenticatedUserID = -1;
-                        System.out.println("Cliente desconectado.");
-                        break;
-                    } else if (authenticatedUserID == -1) {
-                        out.println("ERRO: Necessario login");
-                    } else if (inputLine.startsWith("EDIT:")) {
-                        handleEditCommand(inputLine.substring(5), out);
-                    } else if (inputLine.startsWith("CREATE_GROUP")) {
-                        handleCreateGroupCommand(inputLine.substring(13), out);
-                    } else if (inputLine.startsWith("ADD_MEMBER:")) {
-                        handleAddMemberCommand(inputLine.substring(11), out);
-                    } else if (inputLine.startsWith("REMOVE_MEMBER:")) {
-                        handleRemoveMemberCommand(inputLine.substring(14), out);
-                    } else if (inputLine.startsWith("VIEW_GROUP:")) {
-                        handleViewGroupCommand(inputLine.substring(11), out);
-                    } else if (inputLine.startsWith("LIST_GROUPS:")) {
-                        handleViewGroupCommand(inputLine.substring(12), out);
+                    String comando = inputLine.split(":")[0].trim().toLowerCase();
+                    if (authenticatedUserID == -1) {
+                        switch (comando) {
+                            case "register":
+                                handleRegisterCommand(inputLine.substring(inputLine.indexOf(":") + 1), out);
+                                break;
+
+                            case "login":
+                                handleLoginCommand(inputLine.substring(inputLine.indexOf(":") + 1), out);
+                                break;
+                            default:
+                                out.println("Comando desconhecido");
+                                break;
+                        }
                     } else {
-                        out.println("Comando desconhecido.");
+                        {
+                            switch (comando) {
+                                case "log_out":
+                                    authenticatedUserID = -1;
+                                    SelectedGroupID = -1;
+                                    out.println("Cliente Desconectado");
+                                    break;
+
+                                case "edit":
+                                    handleEditCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                case "create_group":
+                                    handleCreateGroupCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                case "add_member":
+                                    handleAddMemberCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                case "remove_member":
+                                    handleRemoveMemberCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                case "view_group":
+                                    if (inputLine.contains(":"))
+                                    {
+                                        String groupName = inputLine.substring(inputLine.indexOf(":")+1);
+                                        handleViewGroupCommand(groupName,out);
+                                    }
+                                    else
+                                    {
+                                        if (SelectedGroupID != -1)
+                                        {
+                                            handleViewGroupCommand("",out);
+                                        }
+                                        else
+                                        {
+                                            out.println("Selecione um grupo válido");
+                                        }
+                                    }
+                                    break;
+                                case "list_group":
+                                    handleListGroupsCommand(out);
+                                    break;
+                                case "seleciona":
+                                    handleSelecionaGrupo(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                default:
+                                    out.println("Comando Desconhecido");
+                            }
+                        }
                     }
                 }
-            } catch (IOException e) {
+            }
+            catch (IOException e) {
                 System.err.println("Erro de comunicação com o cliente: " + e.getMessage());
             } finally {
                 try {
@@ -114,6 +153,7 @@ public class MainServer {
                 }
             }
         }
+
 
         private void handleRegisterCommand(String data, PrintWriter out) {
             String[] parts = data.split(",");
@@ -141,6 +181,19 @@ public class MainServer {
             }
         }
 
+        private void handleSelecionaGrupo(String data,PrintWriter out)
+        {
+            SelectedGroupID = database.getGroupID(data);
+            if (SelectedGroupID != -1)
+            {
+                out.println("Grupo Selecionado com sucesso.");
+            }
+            else
+            {
+                out.println("Grupo não encontrado");
+            }
+        }
+
         private void handleEditCommand(String data, PrintWriter out) {
             String[] parts = data.split(",");
             if (parts.length == 4) {
@@ -160,11 +213,9 @@ public class MainServer {
         }
 
         private void handleCreateGroupCommand(String data, PrintWriter out) {
-            String[] parts = data.split(",", 2);
-            if (parts.length == 2) {
                 try {
-                    int userId = Integer.parseInt(parts[0]);
-                    String groupName = parts[1];
+                    int userId = authenticatedUserID;
+                    String groupName = data;
 
                     // Check if the group was created successfully
                     boolean success = database.createGroup(groupName, userId);
@@ -174,12 +225,9 @@ public class MainServer {
                         out.println("GROUP_CREATION_FAILED: Um grupo com esse nome ja existe.");
                     }
                 } catch (NumberFormatException e) {
-                    out.println("ID de usuario invalido. Tem que ser uma integer.");
+                    out.println("ID de usuario invalido. Tem que ser um número inteiro.");
                 }
-            } else {
-                out.println("Formato Invalido. Use: CREATE_GROUP:userId,groupName");
             }
-        }
 
         private void handleListGroupsCommand(PrintWriter out) {
             List<String> groups = database.listGroupsForUser(authenticatedUserID);
@@ -196,11 +244,18 @@ public class MainServer {
         private void handleAddMemberCommand(String data, PrintWriter out) {
             String[] parts = data.split(",", 2);
             if (parts.length == 2) {
-                int groupId = Integer.parseInt(parts[0]);
+                int groupId = database.getGroupID(parts[0]);
                 String email = parts[1];
                 boolean success = database.addMemberToGroup(groupId, email, authenticatedUserID);
                 out.println(success ? "Membro adicionado com sucesso." : "Falha ao adicionar membro.");
-            } else {
+            } else if (parts.length == 1 && SelectedGroupID != -1)
+            {
+                String email = parts[0];
+                boolean success = database.addMemberToGroup(SelectedGroupID, email, authenticatedUserID);
+                out.println(success ? "Membro adicionado com sucesso." : "Falha ao adicionar membro.");
+            }
+            else
+            {
                 out.println("Formato inválido. Use: ADD_MEMBER:groupId,email");
             }
         }
@@ -208,18 +263,31 @@ public class MainServer {
         private void handleRemoveMemberCommand(String data, PrintWriter out) {
             String[] parts = data.split(",", 2);
             if (parts.length == 2) {
-                int groupId = Integer.parseInt(parts[0]);
+                int groupId = database.getGroupID(parts[0]);
                 String email = parts[1];
                 boolean success = database.removeMemberFromGroup(groupId, email, authenticatedUserID);
                 out.println(success ? "Membro removido com sucesso." : "Falha ao remover membro.");
-            } else {
+            } else if(parts.length == 1 && SelectedGroupID != -1)
+            {
+                String email = parts[0];
+                boolean success = database.removeMemberFromGroup(SelectedGroupID, email, authenticatedUserID);
+                out.println(success ? "Membro removido com sucesso." : "Falha ao remover membro.");
+            }
+            else {
                 out.println("Formato inválido. Use: REMOVE_MEMBER:groupId,email");
             }
         }
 
         private void handleViewGroupCommand(String data, PrintWriter out) {
-            int groupId = Integer.parseInt(data);
-            String details = database.getGroupDetails(groupId, authenticatedUserID);
+            int groupID;
+            if (data.isEmpty() && SelectedGroupID != -1)
+            {
+                groupID = SelectedGroupID;
+            }
+            else {
+                groupID = database.getGroupID(data);
+            }
+            String details = database.getGroupDetails(groupID, authenticatedUserID);
             if (details == null) {
                 out.println("Grupo não encontrado ou você não tem acesso.");
             } else {
@@ -227,5 +295,6 @@ public class MainServer {
                 out.println(details);
             }
         }
+
     }
 }
