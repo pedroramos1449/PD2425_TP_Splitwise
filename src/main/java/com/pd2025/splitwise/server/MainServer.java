@@ -83,6 +83,7 @@ public class MainServer {
                     } else if (inputLine.startsWith("LOGIN:")) {
                         handleLoginCommand(inputLine.substring(6), out);
                     } else if ("sair".equalsIgnoreCase(inputLine)) {
+                        authenticatedUserID = -1;
                         System.out.println("Cliente desconectado.");
                         break;
                     } else if (authenticatedUserID == -1) {
