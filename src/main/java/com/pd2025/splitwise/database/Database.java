@@ -30,7 +30,7 @@ public class Database {
     public void initializeDatabase() {
         try {
             if (isDatabaseEmpty()) {
-                executeSQLScript("C:\\Users\\André\\Desktop\\PD2425_TP_Splitwise-master\\src\\main\\resources\\init.sql"); // Caminho do init.sql
+                executeSQLScript(""); // Caminho do init.sql
                 System.out.println("Base de dados inicializada com o script init.sql.");
             } else {
                 System.out.println("Base de dados já inicializada.");
