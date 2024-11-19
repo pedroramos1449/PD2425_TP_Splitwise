@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class Database {
@@ -71,17 +73,6 @@ public class Database {
         }
     }
 
-    // Retorna a versão da base de dados
-    public int getDatabaseVersion() {
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT versao FROM versao_bd ORDER BY versao DESC LIMIT 1")) {
-            return rs.next() ? rs.getInt("versao") : 0;
-        } catch (SQLException e) {
-            System.err.println("Erro ao obter a versão da base de dados: " + e.getMessage());
-            return 0;
-        }
-    }
-
     public boolean registerUser(String nome, String email, String telefone, String senha) {
         String sql = "INSERT INTO utilizadores (nome, email, telefone, senha) VALUES (?, ?, ?, ?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -90,6 +81,7 @@ public class Database {
             pstmt.setString(3, telefone);
             pstmt.setString(4, senha);
             pstmt.executeUpdate();
+            incrementDatabaseVersion();
             System.out.println("Usuario registrado com sucesso: " + email);
             return true;
         } catch (SQLException e) {
@@ -98,7 +90,7 @@ public class Database {
         }
     }
 
-    public boolean authenticateUser(String email, String senha) {
+    public int authenticateUser(String email, String senha) {
         String sql = "SELECT id FROM utilizadores WHERE email = ? AND senha = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, email);
@@ -106,15 +98,15 @@ public class Database {
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     System.out.println("Usuario autenticado com sucesso: " + email);
-                    return true;
+                    return rs.getInt("id");
                 } else {
                     System.out.println("Email ou senha invalido: " + email);
-                    return false;
+                    return -1;
                 }
             }
         } catch (SQLException e) {
             System.err.println("Erro ao autenticar o usuario: " + e.getMessage());
-            return false;
+            return -1;
         }
     }
 
@@ -127,6 +119,7 @@ public class Database {
             pstmt.setInt(4, userId);
             int rowsUpdated = pstmt.executeUpdate();
             if (rowsUpdated > 0) {
+                incrementDatabaseVersion();
                 System.out.println("Informacao de usuario mudada com sucesso para o ID: " + userId);
                 return true;
             } else {
@@ -159,6 +152,7 @@ public class Database {
                 insertStmt.executeUpdate();
             }
 
+            incrementDatabaseVersion();
             return true;
 
         } catch (SQLException e) {
@@ -167,5 +161,134 @@ public class Database {
         }
     }
 
+    public List<String> listGroupsForUser(int userId) {
+        String sql = "SELECT g.nome FROM grupos g JOIN membros m ON g.id = m.id_grupo WHERE m.id_utilizador = ?";
+        List<String> groups = new ArrayList<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    groups.add(rs.getString("nome"));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao listar grupos: " + e.getMessage());
+        }
+        return groups;
+    }
+
+    public boolean addMemberToGroup(int groupId, String email, int ownerId) {
+        String checkOwnershipSql = "SELECT COUNT(*) FROM grupos WHERE id = ? AND id_utilizador_criador = ?";
+        String getUserIdSql = "SELECT id FROM utilizadores WHERE email = ?";
+        String insertMemberSql = "INSERT INTO membros (id_grupo, id_utilizador) VALUES (?, ?)";
+
+        try (PreparedStatement checkStmt = connection.prepareStatement(checkOwnershipSql);
+             PreparedStatement getUserStmt = connection.prepareStatement(getUserIdSql);
+             PreparedStatement insertStmt = connection.prepareStatement(insertMemberSql)) {
+
+            checkStmt.setInt(1, groupId);
+            checkStmt.setInt(2, ownerId);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    return false; // Only owners can add members
+                }
+            }
+
+            getUserStmt.setString(1, email);
+            try (ResultSet rs = getUserStmt.executeQuery()) {
+                if (rs.next()) {
+                    int userId = rs.getInt("id");
+                    insertStmt.setInt(1, groupId);
+                    insertStmt.setInt(2, userId);
+                    insertStmt.executeUpdate();
+                    incrementDatabaseVersion();
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao adicionar membro: " + e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean removeMemberFromGroup(int groupId, String email, int ownerId) {
+        String checkOwnershipSql = "SELECT COUNT(*) FROM grupos WHERE id = ? AND id_utilizador_criador = ?";
+        String getUserIdSql = "SELECT id FROM utilizadores WHERE email = ?";
+        String deleteMemberSql = "DELETE FROM membros WHERE id_grupo = ? AND id_utilizador = ?";
+
+        try (PreparedStatement checkStmt = connection.prepareStatement(checkOwnershipSql);
+             PreparedStatement getUserStmt = connection.prepareStatement(getUserIdSql);
+             PreparedStatement deleteStmt = connection.prepareStatement(deleteMemberSql)) {
+
+            checkStmt.setInt(1, groupId);
+            checkStmt.setInt(2, ownerId);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    return false; // Only owners can remove members
+                }
+            }
+
+            getUserStmt.setString(1, email);
+            try (ResultSet rs = getUserStmt.executeQuery()) {
+                if (rs.next()) {
+                    int userId = rs.getInt("id");
+                    deleteStmt.setInt(1, groupId);
+                    deleteStmt.setInt(2, userId);
+                    deleteStmt.executeUpdate();
+                    incrementDatabaseVersion();
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao remover membro: " + e.getMessage());
+        }
+        return false;
+    }
+
+    public String getGroupDetails(int groupId, int userId) {
+        String sql = "SELECT g.nome, u.nome AS membro FROM grupos g JOIN membros m ON g.id = m.id_grupo JOIN utilizadores u ON m.id_utilizador = u.id WHERE g.id = ? AND EXISTS ( SELECT 1 FROM membros WHERE id_grupo = g.id AND id_utilizador = ?)";
+
+        StringBuilder details = new StringBuilder();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, groupId);
+            pstmt.setInt(2, userId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    if (details.length() == 0) {
+                        details.append("Nome do grupo: ").append(rs.getString("nome")).append("\nMembros:\n");
+                    }
+                    details.append("- ").append(rs.getString("membro")).append("\n");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao obter detalhes do grupo: " + e.getMessage());
+            return null;
+        }
+        return details.length() > 0 ? details.toString() : null;
+    }
+
+    /// DB Versioning
+
+    // Retorna a versão da base de dados
+    public int getDatabaseVersion() {
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT versao FROM versao_bd ORDER BY versao DESC LIMIT 1")) {
+            return rs.next() ? rs.getInt("versao") : 0;
+        } catch (SQLException e) {
+            System.err.println("Erro ao obter a versão da base de dados: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    public void incrementDatabaseVersion() {
+        String sql = "INSERT INTO versao_bd (versao) VALUES (?)";
+        int currentVersion = getDatabaseVersion();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, currentVersion + 1);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Erro ao incrementar versão da base de dados: " + e.getMessage());
+        }
+    }
     // Métodos adicionais para operações de CRUD
 }
