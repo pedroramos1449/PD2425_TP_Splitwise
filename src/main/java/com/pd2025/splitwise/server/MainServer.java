@@ -232,12 +232,13 @@ public class MainServer {
         private void handleListGroupsCommand(PrintWriter out) {
             List<String> groups = database.listGroupsForUser(authenticatedUserID);
             if (groups.isEmpty()) {
-                out.println("Você não está em nenhum grupo.");
+                out.println("Não pertence a nenhum grupo.");
             } else {
-                out.println("Seus grupos:");
+                StringBuilder response = new StringBuilder("Grupos a que pertence:");
                 for (String group : groups) {
-                    out.println("- " + group);
+                    response.append(" Grupo: ").append(group);
                 }
+                out.println(response);
             }
         }
 
