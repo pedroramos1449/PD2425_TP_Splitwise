@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
+import java.sql.PreparedStatement;
 import java.util.List;
 
 public class MainServer {
@@ -94,7 +95,7 @@ public class MainServer {
                     } else {
                         {
                             switch (comando) {
-                                case "log_out":
+                                case "logout":
                                     authenticatedUserID = -1;
                                     SelectedGroupID = -1;
                                     out.println("Cliente Desconectado");
@@ -133,14 +134,21 @@ public class MainServer {
                                 case "list_group":
                                     handleListGroupsCommand(out);
                                     break;
-                                case "seleciona":
+                                case "select_group":
                                     handleSelecionaGrupo(inputLine.substring(inputLine.indexOf(":") + 1),out);
+                                    break;
+                                case "show_invite":
+                                    handleShowInvites(out);
+                                    break;
+                                case "answer_invite":
+                                    handleAnswerRequestCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
                                     break;
                                 default:
                                     out.println("Comando Desconhecido");
                             }
                         }
                     }
+                    out.println("END");
                 }
             }
             catch (IOException e) {
@@ -183,9 +191,10 @@ public class MainServer {
 
         private void handleSelecionaGrupo(String data,PrintWriter out)
         {
-            SelectedGroupID = database.getGroupID(data);
-            if (SelectedGroupID != -1)
+            int GroupID = database.getGroupID(data);
+            if ((GroupID != -1 && database.isUserMemberOfGroup(GroupID, authenticatedUserID)))
             {
+                SelectedGroupID = GroupID;
                 out.println("Grupo Selecionado com sucesso.");
             }
             else
@@ -232,11 +241,29 @@ public class MainServer {
         private void handleListGroupsCommand(PrintWriter out) {
             List<String> groups = database.listGroupsForUser(authenticatedUserID);
             if (groups.isEmpty()) {
-                out.println("Não pertence a nenhum grupo.");
+                out.println("Você não está em nenhum grupo.");
             } else {
-                StringBuilder response = new StringBuilder("Grupos a que pertence:");
+                StringBuilder response = new StringBuilder("Seus grupos:");
                 for (String group : groups) {
                     response.append(" Grupo: ").append(group);
+                }
+                out.println(response);
+            }
+        }
+
+        private void handleShowInvites(PrintWriter out)
+        {
+            List<String> convitesPendentes = database.ShowInvites(authenticatedUserID);
+            if(convitesPendentes.isEmpty())
+            {
+                out.println("Não tem nenhum convite");
+            }
+            else
+            {
+                StringBuilder response = new StringBuilder("Convites pendentes:");
+                for(String convite:convitesPendentes)
+                {
+                    response.append(convite);
                 }
                 out.println(response);
             }
@@ -247,17 +274,17 @@ public class MainServer {
             if (parts.length == 2) {
                 int groupId = database.getGroupID(parts[0]);
                 String email = parts[1];
-                boolean success = database.addMemberToGroup(groupId, email, authenticatedUserID);
-                out.println(success ? "Membro adicionado com sucesso." : "Falha ao adicionar membro.");
+                boolean success = database.createInvite(groupId, email, authenticatedUserID);
+                out.println(success ? "Convite enviado." : "Falha ao enviar convite.");
             } else if (parts.length == 1 && SelectedGroupID != -1)
             {
                 String email = parts[0];
-                boolean success = database.addMemberToGroup(SelectedGroupID, email, authenticatedUserID);
-                out.println(success ? "Membro adicionado com sucesso." : "Falha ao adicionar membro.");
+                boolean success = database.createInvite(SelectedGroupID, email, authenticatedUserID);
+                out.println(success ? "Convite enviado." : "Falha ao enviar convite.");
             }
             else
             {
-                out.println("Formato inválido. Use: ADD_MEMBER:groupId,email");
+                out.println("Formato inválido. Use: ADD_MEMBER:groupName,email");
             }
         }
 
@@ -279,6 +306,48 @@ public class MainServer {
             }
         }
 
+        private void handleAnswerRequestCommand(String data, PrintWriter out)
+        {
+            String [] parts = data.split(",",2);
+            if(parts.length == 2 || (parts.length == 1 && SelectedGroupID != -1)) {
+                String groupName;
+                String resposta;
+                if (parts.length == 2) {
+                    groupName = parts[0].trim();
+                    resposta = parts[1].trim().toLowerCase();
+                } else {
+                    groupName = database.getGroupName(SelectedGroupID);
+                    resposta = parts[0].trim().toLowerCase();
+                }
+                if (!resposta.equals("accept") && !resposta.equals("deny")) {
+                    out.println("Ação inválida. Use 'accept' ou 'deny'.");
+                    return;
+                }
+                int inviteID = database.getPendingInviteID(groupName);
+                if (inviteID == -1) {
+                    out.println("Não tem pedidos deste grupo/Grupo não existe.");
+                }
+                boolean success = false;
+                if (resposta.equals("accept")) {
+                    success = database.acceptInvite(inviteID, authenticatedUserID);
+                } else {
+                    success = database.denyInvite(inviteID, authenticatedUserID);
+                }
+                if (success)
+                {
+                        out.println("Pedido atualizado com sucesso");
+                    }
+                    else
+                    {
+                        out.println("Falha ao responder ao pedido");
+                    }
+            }
+            else
+            {
+                out.println("Formato Inválido");
+            }
+        }
+
         private void handleViewGroupCommand(String data, PrintWriter out) {
             int groupID;
             if (data.isEmpty() && SelectedGroupID != -1)
@@ -293,9 +362,17 @@ public class MainServer {
                 out.println("Grupo não encontrado ou você não tem acesso.");
             } else {
                 out.println("Detalhes do grupo:");
-                out.println(details);
+                Resposta(details,out);
             }
         }
 
+        private void Resposta(String resposta, PrintWriter out) {
+            for (String line : resposta.split("\n")) {
+                out.println(line);
+            }
+        }
+
+
     }
 }
+
