@@ -143,6 +143,9 @@ public class MainServer {
                                 case "answer_invite":
                                     handleAnswerRequestCommand(inputLine.substring(inputLine.indexOf(":") + 1),out);
                                     break;
+                                case "change_group_name":
+                                    handleChangeGroupName(inputLine.substring(inputLine.indexOf(":")+1),out);
+                                    break;
                                 default:
                                     out.println("Comando Desconhecido");
                             }
@@ -365,6 +368,31 @@ public class MainServer {
                 Resposta(details,out);
             }
         }
+
+        private void handleChangeGroupName(String data, PrintWriter out)
+        {
+            String[] parts = data.split(",");
+            if(parts.length == 2)
+            {
+                String groupName = parts[0];
+                int groupID = database.getGroupID(groupName);
+                String newName = parts[1];
+                boolean success = database.ChangeGroupName(groupID,newName);
+                out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
+            }else
+                if (parts.length == 1 && SelectedGroupID != 1)
+                {
+                    String newName = parts[0];
+                    boolean success = database.ChangeGroupName(SelectedGroupID,newName);
+                    out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
+                }
+                else
+                {
+                    out.println("Formato inválido!Use: change_group_name:nomeGrupo,novoNome");
+                }
+
+        }
+        
 
         private void Resposta(String resposta, PrintWriter out) {
             for (String line : resposta.split("\n")) {
