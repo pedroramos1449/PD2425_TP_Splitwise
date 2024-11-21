@@ -30,8 +30,14 @@ public class Client {
                 }
 
                 out.println(userMessage); // Envia a mensagem ao servidor
-                String response = in.readLine(); // Lê a resposta do servidor
-                System.out.println("Resposta do servidor: " + response);
+                String resposta; // Lê a resposta do servidor
+                while((resposta = in.readLine()) != null) {
+                    if ("END".equals(resposta))
+                    {
+                        break;
+                    }
+                    System.out.println("Resposta do servidor: " + resposta);
+                }
             }
         } catch (IOException e) {
             System.err.println("Erro de conexão: " + e.getMessage());
