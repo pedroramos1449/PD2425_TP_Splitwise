@@ -462,6 +462,21 @@ public class Database {
         }
     }
 
+    public boolean ChangeGroupName(int groupID,String novoNome)
+    {
+        String sql = "UPDATE grupos SET nome = ? WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql))
+        {
+            ps.setString(1,novoNome);
+            ps.setInt(2,groupID);
+            int mudancas = ps.executeUpdate();
+            return mudancas > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public void incrementDatabaseVersion() {
         String sql = "INSERT INTO versao_bd (versao) VALUES (?)";
         int currentVersion = getDatabaseVersion();
