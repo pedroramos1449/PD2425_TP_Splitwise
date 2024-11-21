@@ -6,13 +6,21 @@ CREATE TABLE IF NOT EXISTS utilizadores (
                                         senha TEXT NOT NULL
 );
 
-DROP TABLE IF EXISTS grupos;
+CREATE TABLE IF NOT EXISTS grupos (
+                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      nome TEXT NOT NULL UNIQUE,
+                                      id_utilizador_criador INTEGER NOT NULL,
+                                      FOREIGN KEY (id_utilizador_criador) REFERENCES utilizadores(id)
+    );
 
-CREATE TABLE grupos (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nome TEXT NOT NULL UNIQUE,
-                        id_utilizador_criador INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS membros (
+                                       id_grupo INTEGER NOT NULL,
+                                       id_utilizador INTEGER NOT NULL,
+                                       PRIMARY KEY (id_grupo, id_utilizador),
+                                       FOREIGN KEY (id_grupo) REFERENCES grupos(id),
+                                       FOREIGN KEY (id_utilizador) REFERENCES utilizadores(id)
 );
+
 
 CREATE TABLE IF NOT EXISTS despesas (
                                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,12 +35,4 @@ CREATE TABLE IF NOT EXISTS despesas (
 
 CREATE TABLE IF NOT EXISTS versao_bd (
                                          versao INTEGER PRIMARY KEY
-);
-
-CREATE TABLE IF NOT EXISTS grupo_utilizadores (
-                                                  id_grupo INTEGER NOT NULL,
-                                                  id_utilizador INTEGER NOT NULL,
-                                                  PRIMARY KEY (id_grupo, id_utilizador),
-                                                  FOREIGN KEY (id_grupo) REFERENCES grupos(id),
-                                                  FOREIGN KEY (id_utilizador) REFERENCES utilizadores(id)
 );

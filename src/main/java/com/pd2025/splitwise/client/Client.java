@@ -9,7 +9,6 @@ import java.io.PrintWriter;
 import java.net.Socket;
 
 public class Client {
-
     public static void main(String[] args) {
         try (Socket socket = new Socket("127.0.0.1", Constants.SERVER_PORT);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -21,56 +20,27 @@ public class Client {
 
             String userMessage;
             while (true) {
-                System.out.println("\nOpções:");
-                System.out.println("1. Enviar mensagem para o servidor");
-                System.out.println("2. Selecionar grupo");
-                System.out.println("Digite 'sair' para encerrar.");
-                System.out.print("Escolha uma opção: ");
-                String choice = userInput.readLine();
+                System.out.print("Digite uma mensagem para o servidor: ");
+                userMessage = userInput.readLine();
 
-                if ("sair".equalsIgnoreCase(choice)) {
-                    out.println("sair");
+                if ("sair".equalsIgnoreCase(userMessage)) {
+                    out.println(userMessage);
                     System.out.println("Desconectando...");
                     break;
                 }
 
-                switch (choice) {
-                    case "1":
-                        System.out.print("Digite uma mensagem para o servidor: ");
-                        userMessage = userInput.readLine();
-                        out.println(userMessage);
-                        String response = in.readLine();
-                        System.out.println("Resposta do servidor: " + response);
+                out.println(userMessage); // Envia a mensagem ao servidor
+                String resposta; // Lê a resposta do servidor
+                while((resposta = in.readLine()) != null) {
+                    if ("END".equals(resposta))
+                    {
                         break;
-
-                    case "2":
-                        System.out.print("Digite o ID do grupo que deseja selecionar: ");
-                        int groupId;
-                        try {
-                            groupId = Integer.parseInt(userInput.readLine());
-                            selectGroup(out, in, groupId);
-                        } catch (NumberFormatException e) {
-                            System.out.println("ID do grupo inválido. Por favor, tente novamente.");
-                        }
-                        break;
-
-                    default:
-                        System.out.println("Opção inválida. Por favor, escolha 1 ou 2.");
-                        break;
+                    }
+                    System.out.println("Resposta do servidor: " + resposta);
                 }
             }
         } catch (IOException e) {
             System.err.println("Erro de conexão: " + e.getMessage());
-        }
-    }
-
-    private static void selectGroup(PrintWriter out, BufferedReader in, int groupId) {
-        try {
-            out.println("SET_GROUP " + groupId);
-            String response = in.readLine();
-            System.out.println("Resposta do servidor: " + response);
-        } catch (IOException e) {
-            System.err.println("Erro ao selecionar grupo: " + e.getMessage());
         }
     }
 }
