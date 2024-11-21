@@ -30,7 +30,7 @@ public class Database {
     public void initializeDatabase() {
         try {
             if (isDatabaseEmpty()) {
-                executeSQLScript(""); // Caminho do init.sql
+                executeSQLScript("C:\\Users\\André\\Desktop\\PD2425_TP_Splitwise-master\\src\\main\\resources\\init.sql"); // Caminho do init.sql
                 System.out.println("Base de dados inicializada com o script init.sql.");
             } else {
                 System.out.println("Base de dados já inicializada.");
@@ -158,8 +158,7 @@ public class Database {
                     insertStmt.executeUpdate();
                 }
                 int groupID = getGroupID(groupName);
-                String mail = getUserEmail(userId);
-                addMemberToGroup(groupID,mail,userId);
+                addMemberToGroup(groupID,userId);
 
                 incrementDatabaseVersion();
                 return true;
@@ -186,39 +185,104 @@ public class Database {
         return groups;
     }
 
-    public boolean addMemberToGroup(int groupId, String email, int ownerId) {
-        String checkOwnershipSql = "SELECT COUNT(*) FROM grupos WHERE id = ? AND id_utilizador_criador = ?";
-        String getUserIdSql = "SELECT id FROM utilizadores WHERE email = ?";
-        String insertMemberSql = "INSERT INTO membros (id_grupo, id_utilizador) VALUES (?, ?)";
+    public boolean createInvite(int groupID, String email, int userId) {
+        String ifMemberSql = "SELECT COUNT(*) FROM membros WHERE id_grupo = ? AND id_utilizador = ?";
+        String getUserID = "SELECT id FROM utilizadores WHERE email = ?";
+        String ifAlreadyInvitedSql = "SELECT COUNT(*) FROM pedidos_grupo WHERE id_grupo = ? AND id_utilizador = ? AND status = 'pendente'";
+        String ifAlreadyInGroupSql = "SELECT COUNT(*) FROM membros WHERE id_grupo = ? AND id_utilizador = ?";
+        String InviteSql = "INSERT INTO pedidos_grupo (id_grupo, id_utilizador, id_remetente,status) VALUES (?, ?, ?, 'pendente')";
 
-        try (PreparedStatement checkStmt = connection.prepareStatement(checkOwnershipSql);
-             PreparedStatement getUserStmt = connection.prepareStatement(getUserIdSql);
-             PreparedStatement insertStmt = connection.prepareStatement(insertMemberSql)) {
+        try (PreparedStatement ifMemberStmt = connection.prepareStatement(ifMemberSql);
+             PreparedStatement idStmt = connection.prepareStatement(getUserID);
+             PreparedStatement AInvitedStmt = connection.prepareStatement(ifAlreadyInvitedSql);
+             PreparedStatement GroupStmt = connection.prepareStatement(ifAlreadyInGroupSql);
+             PreparedStatement inviteStmt = connection.prepareStatement(InviteSql)) {
 
-            checkStmt.setInt(1, groupId);
-            checkStmt.setInt(2, ownerId);
-            try (ResultSet rs = checkStmt.executeQuery()) {
+            ifMemberStmt.setInt(1, groupID);
+            ifMemberStmt.setInt(2, userId);
+            try (ResultSet rs = ifMemberStmt.executeQuery()) {
                 if (!rs.next() || rs.getInt(1) == 0) {
-                    return false; // Only owners can add members
+                    System.err.println("Erro: Utilizador não pertence ao grupo."); // Debug
+                    return false;
                 }
             }
 
-            getUserStmt.setString(1, email);
-            try (ResultSet rs = getUserStmt.executeQuery()) {
+            idStmt.setString(1, email);
+
+            try (ResultSet rs = idStmt.executeQuery()) {
                 if (rs.next()) {
-                    int userId = rs.getInt("id");
-                    insertStmt.setInt(1, groupId);
-                    insertStmt.setInt(2, userId);
-                    insertStmt.executeUpdate();
-                    incrementDatabaseVersion();
+                    int targetID = rs.getInt("id");
+                    GroupStmt.setInt(1, groupID);
+                    GroupStmt.setInt(2, targetID);
+                    try (ResultSet GroupRs = GroupStmt.executeQuery())
+                    {
+                        if(GroupRs.next() && GroupRs.getInt(1) > 0)
+                        {
+                            System.err.println("Erro: O utilizador que está a tentar convidar já é membro do grupo.");
+                            return false;
+                        }
+                    }
+                    AInvitedStmt.setInt(1,groupID);
+                    AInvitedStmt.setInt(2,targetID);
+                    try (ResultSet invitedRS = AInvitedStmt.executeQuery())
+                    {
+                        if(invitedRS.next() && invitedRS.getInt(1)>0)
+                        {
+                            System.err.println("Erro:O utilizador já tem um convite para este grupo.");
+                            return false;
+                        }
+                    }
+
+                    inviteStmt.setInt(1, groupID);
+                    inviteStmt.setInt(2, targetID);
+                    inviteStmt.setInt(3, userId);
+                    inviteStmt.executeUpdate();
                     return true;
+                } else {
+                    System.err.println("Erro: E-mail não encontrado."); // Debug
+                    return false;
                 }
             }
         } catch (SQLException e) {
+            System.err.println("Erro ao criar convite: " + e.getMessage()); // Debug
+        }
+        return false;
+    }
+
+
+    public boolean addMemberToGroup(int groupId,int ownerId) {
+        String sql = "INSERT INTO membros (id_grupo, id_utilizador) VALUES (?, ?)";
+
+        try (PreparedStatement Stmt = connection.prepareStatement(sql)) {
+                    Stmt.setInt(1, groupId);
+                    Stmt.setInt(2, ownerId);
+                    Stmt.executeUpdate();
+                    incrementDatabaseVersion();
+                    return true;
+                }
+        catch (SQLException e) {
             System.err.println("Erro ao adicionar membro: " + e.getMessage());
         }
         return false;
     }
+
+    public List<String> ShowInvites(int userId) {
+        String sql = " SELECT p.id AS pedido_id, g.nome AS grupo_nome FROM pedidos_grupo p JOIN grupos g ON p.id_grupo = g.id JOIN utilizadores u ON p.id_utilizador = u.id WHERE p.id_utilizador = ? AND p.status = 'pendente' ";
+        List<String> pedidos = new ArrayList<>();
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String pedido = " Grupo: " + rs.getString("grupo_nome");
+                    pedidos.add(pedido);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao listar pedidos pendentes: " + e.getMessage());
+        }
+        return pedidos;
+    }
+
 
     public boolean removeMemberFromGroup(int groupId, String email, int ownerId) {
         String checkOwnershipSql = "SELECT COUNT(*) FROM grupos WHERE id = ? AND id_utilizador_criador = ?";
@@ -233,7 +297,7 @@ public class Database {
             checkStmt.setInt(2, ownerId);
             try (ResultSet rs = checkStmt.executeQuery()) {
                 if (!rs.next() || rs.getInt(1) == 0) {
-                    return false; // Only owners can remove members
+                    return false;
                 }
             }
 
@@ -273,6 +337,7 @@ public class Database {
             System.err.println("Erro ao obter detalhes do grupo: " + e.getMessage());
             return null;
         }
+
         return details.length() > 0 ? details.toString() : null;
     }
 
@@ -283,29 +348,106 @@ public class Database {
             pstmt.setString(1, nome);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getInt("id"); 
+                    return rs.getInt("id");  // Retorna o ID do grupo encontrado
                 }
             }
         } catch (SQLException e) {
             System.err.println("Erro ao obter o ID do grupo: " + e.getMessage());
         }
-        return -1;  
+        return -1;  // Retorna -1 caso o grupo não seja encontrado
     }
 
-    public String getUserEmail(int userId) {
-        String sql = "SELECT email FROM utilizadores WHERE id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, userId); 
-            try (ResultSet rs = stmt.executeQuery()) {
+
+    public String getGroupName(int groupId) {
+        String sql = "SELECT nome FROM grupos WHERE id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, groupId);
+            try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getString("email");
+                    return rs.getString("nome");
                 }
             }
         } catch (SQLException e) {
-            System.err.println("Erro ao buscar e-mail: " + e.getMessage());
+            System.err.println("Erro ao procurar o grupo: " + e.getMessage());
         }
         return null;
     }
+
+    public int getPendingInviteID(String groupName) {
+        String sql = "SELECT p.id FROM pedidos_grupo p JOIN grupos g ON p.id_grupo = g.id WHERE g.nome = ? AND p.status = 'pendente' ";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, groupName);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    incrementDatabaseVersion();
+                    return rs.getInt("id");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao buscar o ID do convite pendente: " + e.getMessage());
+        }
+        return -1;
+    }
+
+    public boolean acceptInvite(int inviteId, int userId) {
+        String addToGroupSql = "INSERT INTO membros (id_grupo, id_utilizador) SELECT id_grupo, id_utilizador FROM pedidos_grupo WHERE id = ?";
+        String deleteInviteSql = "DELETE FROM pedidos_grupo WHERE id = ?";
+
+        try (PreparedStatement insertStmt = connection.prepareStatement(addToGroupSql);
+             PreparedStatement deleteStmt = connection.prepareStatement(deleteInviteSql)) {
+
+
+            insertStmt.setInt(1, inviteId);
+            int rowsInserted = insertStmt.executeUpdate();
+
+            if (rowsInserted > 0) {
+                deleteStmt.setInt(1, inviteId);
+                deleteStmt.executeUpdate();
+                incrementDatabaseVersion();
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao aceitar o convite: " + e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean denyInvite(int inviteId, int userId) {
+        String deleteInviteSql = "DELETE FROM pedidos_grupo WHERE id = ?";
+
+        try (PreparedStatement deleteStmt = connection.prepareStatement(deleteInviteSql)) {
+
+            deleteStmt.setInt(1, inviteId);
+            int rowsDeleted = deleteStmt.executeUpdate();
+
+            if (rowsDeleted > 0) {
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao recusar o convite: " + e.getMessage());
+        }
+        return false; // Caso contrário, falha ao recusar o convite
+    }
+
+
+    public boolean isUserMemberOfGroup(int groupId, int userId) {
+        String sql = "SELECT COUNT(*) FROM membros WHERE id_grupo = ? AND id_utilizador = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, groupId);
+            pstmt.setInt(2, userId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao verificar membro do grupo: " + e.getMessage());
+        }
+        return false;
+    }
+
+
+
 
     /// DB Versioning
 
@@ -330,6 +472,8 @@ public class Database {
             System.err.println("Erro ao incrementar versão da base de dados: " + e.getMessage());
         }
     }
+
+
 
 
     // Métodos adicionais para operações de CRUD
