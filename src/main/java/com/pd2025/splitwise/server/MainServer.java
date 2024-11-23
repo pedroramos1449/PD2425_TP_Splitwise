@@ -3,12 +3,14 @@ package com.pd2025.splitwise.server;
 import com.pd2025.splitwise.database.Database;
 import com.pd2025.splitwise.util.Constants;
 
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
 import java.sql.PreparedStatement;
+import java.util.ArrayList;
 import java.util.List;
 
 public class MainServer {
@@ -146,6 +148,12 @@ public class MainServer {
                                 case "change_group_name":
                                     handleChangeGroupName(inputLine.substring(inputLine.indexOf(":")+1),out);
                                     break;
+                                case "add_despesa":
+                                    handleAddDespesa(inputLine.substring(inputLine.indexOf(":")+1),out);
+                                    break;
+                                case "total_despesa":
+                                    handleSomaDespesa(out);
+                                    break;
                                 default:
                                     out.println("Comando Desconhecido");
                             }
@@ -180,6 +188,8 @@ public class MainServer {
             }
         }
 
+
+
         private void handleLoginCommand(String data, PrintWriter out) {
             String[] parts = data.split(",");
             if (parts.length == 2) {
@@ -195,7 +205,7 @@ public class MainServer {
         private void handleSelecionaGrupo(String data,PrintWriter out)
         {
             int GroupID = database.getGroupID(data);
-            if ((GroupID != -1 && database.isUserMemberOfGroup(GroupID, authenticatedUserID)))
+            if ((GroupID != -1 && database.isMember(GroupID, authenticatedUserID)))
             {
                 SelectedGroupID = GroupID;
                 out.println("Grupo Selecionado com sucesso.");
@@ -223,6 +233,8 @@ public class MainServer {
                 out.println("Formato Invalido. Use: EDIT:id,newName,newPhone,newPassword");
             }
         }
+
+
 
         private void handleCreateGroupCommand(String data, PrintWriter out) {
                 try {
@@ -291,6 +303,30 @@ public class MainServer {
             }
         }
 
+        private void handleChangeGroupName(String data, PrintWriter out)
+        {
+            String[] parts = data.split(",");
+            if(parts.length == 2)
+            {
+                String groupName = parts[0];
+                int groupID = database.getGroupID(groupName);
+                String newName = parts[1];
+                boolean success = database.ChangeGroupName(groupID,newName);
+                out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
+            }else
+                if (parts.length == 1 && SelectedGroupID != 1)
+                {
+                    String newName = parts[0];
+                    boolean success = database.ChangeGroupName(SelectedGroupID,newName);
+                    out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
+                }
+                else
+                {
+                    out.println("Formato inválido!Use: change_group_name:nomeGrupo,novoNome");
+                }
+
+        }
+
         private void handleRemoveMemberCommand(String data, PrintWriter out) {
             String[] parts = data.split(",", 2);
             if (parts.length == 2) {
@@ -351,6 +387,58 @@ public class MainServer {
             }
         }
 
+        private void handleAddDespesa(String data, PrintWriter out)
+        {
+            if (SelectedGroupID == -1)
+            {
+                out.println("Selecione um grupo primeiro!");
+                return;
+            }
+
+            String [] parts = data.split(",",4);
+            String date = parts[0];
+            double valor = Double.parseDouble(parts[1]);
+            String descricao = parts[2];
+            String[] participantes = parts[3].split(";");
+            int idPagador;
+
+            if (parts.length > 4)
+            {
+                String pagador = parts[4];
+                idPagador = database.getUserId(pagador);
+                if(idPagador == -1)
+                {
+                    out.println("Falha:Pagador não encontrado.");
+                    return;
+                }
+            }
+            else
+            {
+                idPagador = authenticatedUserID;
+            }
+
+            List<Integer> idsParticipantes = new ArrayList<>();
+            for (String participante : participantes) {
+                int idParticipante = database.getUserId(participante.trim());
+                if (idParticipante == -1) {
+                    out.println("Falha: Participante " + participante + " não encontrado.");
+                    return;
+                }
+                idsParticipantes.add(idParticipante);
+            }
+
+            boolean sucess = database.AddDespesa(SelectedGroupID,date,valor,descricao,idsParticipantes,idPagador);
+
+            if (sucess)
+            {
+                out.println("Despesa adicionada com sucesso.");
+            }
+            else
+            {
+                out.println("Falha a adicionar despesa.");
+            }
+        }
+
         private void handleViewGroupCommand(String data, PrintWriter out) {
             int groupID;
             if (data.isEmpty() && SelectedGroupID != -1)
@@ -369,30 +457,26 @@ public class MainServer {
             }
         }
 
-        private void handleChangeGroupName(String data, PrintWriter out)
+        private void handleSomaDespesa(PrintWriter out)
         {
-            String[] parts = data.split(",");
-            if(parts.length == 2)
-            {
-                String groupName = parts[0];
-                int groupID = database.getGroupID(groupName);
-                String newName = parts[1];
-                boolean success = database.ChangeGroupName(groupID,newName);
-                out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
-            }else
-                if (parts.length == 1 && SelectedGroupID != 1)
-                {
-                    String newName = parts[0];
-                    boolean success = database.ChangeGroupName(SelectedGroupID,newName);
-                    out.println(success ? "Nome do grupo mudado com sucesso." : "Falha ao mudar nome do grupo.");
+            if(SelectedGroupID != -1) {
+                double total = -1;
+                total = database.TotalDespesas(SelectedGroupID);
+                if (total != -1) {
+                    out.printf("Gastaram: %.2f€\n", total); //formatacao para 2 casas decimais  + euro
                 }
                 else
                 {
-                    out.println("Formato inválido!Use: change_group_name:nomeGrupo,novoNome");
+                    out.println("Falha ao encontrar total de despesas");
                 }
-
+            }
+            else
+            {
+                out.println("Selecione um grupo primeiro!");
+            }
         }
-        
+
+
 
         private void Resposta(String resposta, PrintWriter out) {
             for (String line : resposta.split("\n")) {
@@ -403,4 +487,5 @@ public class MainServer {
 
     }
 }
+
 
