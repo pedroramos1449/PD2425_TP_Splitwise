@@ -1,11 +1,9 @@
 package com.pd2025.splitwise.database;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
 public class Database {
     private Connection connection;
@@ -461,7 +459,7 @@ public class Database {
         return false;
     }
 
-    public boolean AddDespesa(int groupID,String data,double valor,String descricao,String[] participantes,int idpagador)
+    public boolean AddDespesa(int groupID, String data, double valor, String descricao, List<Integer> participantes, int idpagador)
     {
         String checkGroupSql = "SELECT COUNT(*) FROM grupos WHERE id = ?";
         try (PreparedStatement psCheckGroup = connection.prepareStatement(checkGroupSql)) {
@@ -483,9 +481,9 @@ public class Database {
 
         List<Integer> participantesID = new ArrayList<>();
 
-        for(String participante : participantes)
+        for(Integer participante : participantes)
         {
-            int idParticipante = getUserId(participante);
+            int idParticipante = getUserId(String.valueOf(participante));
             if (idParticipante == -1)
             {
                 System.err.println("Utilizador: " + participante + " não existe.");
@@ -577,6 +575,62 @@ public class Database {
         return total;
     }
 
+    public boolean deleteGroup(int groupId, int ownerId) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        try {
+            // Get a connection to the database
+            conn = DriverManager.getConnection("jdbc:sqlite" + dbFilePath);
+
+            // First, check if the group exists and if the user is the owner
+            String checkGroupSQL = "SELECT * FROM groups WHERE group_id = ? AND owner_id = ?";
+            stmt = conn.prepareStatement(checkGroupSQL);
+            stmt.setInt(1, groupId);
+            stmt.setInt(2, ownerId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (!rs.next()) {
+                return false;  // No group found or user is not the owner
+            }
+
+            // Group exists, so proceed with deletion
+            String deleteGroupSQL = "DELETE FROM groups WHERE group_id = ?";
+            stmt = conn.prepareStatement(deleteGroupSQL);
+            stmt.setInt(1, groupId);
+            int rowsAffected = stmt.executeUpdate();
+
+            if (rowsAffected > 0) {
+                // Optionally, delete associated members or expenses here
+                String deleteMembersSQL = "DELETE FROM group_members WHERE group_id = ?";
+                stmt = conn.prepareStatement(deleteMembersSQL);
+                stmt.setInt(1, groupId);
+                stmt.executeUpdate();
+
+                String deleteExpensesSQL = "DELETE FROM expenses WHERE group_id = ?";
+                stmt = conn.prepareStatement(deleteExpensesSQL);
+                stmt.setInt(1, groupId);
+                stmt.executeUpdate();
+
+                return true;  // Group and related data deleted successfully
+            } else {
+                return false;  // Group deletion failed
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;  // Handle database error
+        } finally {
+            try {
+                if (stmt != null) {
+                    stmt.close();
+                }
+                if (conn != null) {
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
 
     /// DB Versioning
@@ -602,7 +656,6 @@ public class Database {
             System.err.println("Erro ao incrementar versão da base de dados: " + e.getMessage());
         }
     }
-
 
 
 

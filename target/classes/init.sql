@@ -13,15 +13,6 @@ CREATE TABLE IF NOT EXISTS grupos (
                                       FOREIGN KEY (id_utilizador_criador) REFERENCES utilizadores(id)
     );
 
-CREATE TABLE IF NOT EXISTS despesas_partilhadas (
-                                         id_despesa INTEGER NOT NULL,
-                                         id_utilizador INTEGER NOT NULL,
-                                         valor REAL NOT NULL,
-                                         PRIMARY KEY (id_despesa, id_utilizador),
-                                         FOREIGN KEY (id_despesa) REFERENCES despesas(id),
-                                         FOREIGN KEY (id_utilizador) REFERENCES utilizadores(id)
-);
-
 CREATE TABLE IF NOT EXISTS despesas (
                                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                                         id_grupo INTEGER NOT NULL,

@@ -154,6 +154,9 @@ public class MainServer {
                                 case "total_despesa":
                                     handleSomaDespesa(out);
                                     break;
+                                case "delete_group":
+                                    handleDeleteGroupCommand(inputLine.substring(inputLine.indexOf(":") + 1), out);
+                                    break;
                                 default:
                                     out.println("Comando Desconhecido");
                             }
@@ -387,6 +390,45 @@ public class MainServer {
             }
         }
 
+
+
+        private void handleViewGroupCommand(String data, PrintWriter out) {
+            int groupID;
+            if (data.isEmpty() && SelectedGroupID != -1)
+            {
+                groupID = SelectedGroupID;
+            }
+            else {
+                groupID = database.getGroupID(data);
+            }
+            String details = database.getGroupDetails(groupID, authenticatedUserID);
+            if (details == null) {
+                out.println("Grupo não encontrado ou você não tem acesso.");
+            } else {
+                out.println("Detalhes do grupo:");
+                Resposta(details,out);
+            }
+        }
+
+        private void handleSomaDespesa(PrintWriter out)
+        {
+            if(SelectedGroupID != -1) {
+                double total = -1;
+                total = database.TotalDespesas(SelectedGroupID);
+                if (total != -1) {
+                    out.printf("Gastaram: %.2f€\n", total); //formatacao para 2 casas decimais  + euro
+                }
+                else
+                {
+                    out.println("Falha ao encontrar total de despesas");
+                }
+            }
+            else
+            {
+                out.println("Selecione um grupo primeiro!");
+            }
+        }
+
         private void handleAddDespesa(String data, PrintWriter out)
         {
             if (SelectedGroupID == -1)
@@ -439,43 +481,25 @@ public class MainServer {
             }
         }
 
-        private void handleViewGroupCommand(String data, PrintWriter out) {
-            int groupID;
-            if (data.isEmpty() && SelectedGroupID != -1)
-            {
-                groupID = SelectedGroupID;
-            }
-            else {
-                groupID = database.getGroupID(data);
-            }
-            String details = database.getGroupDetails(groupID, authenticatedUserID);
-            if (details == null) {
-                out.println("Grupo não encontrado ou você não tem acesso.");
-            } else {
-                out.println("Detalhes do grupo:");
-                Resposta(details,out);
+        private void handleDeleteGroupCommand(String inputLine, PrintWriter out) {
+            try {
+                String[] inputs = inputLine.split(":");
+                int groupId = Integer.parseInt(inputs[0].trim());
+                int ownerId = Integer.parseInt(inputs[1].trim());
+
+                // Perform the delete group operation
+                boolean success = database.deleteGroup(groupId, ownerId);
+
+                // Respond to the client
+                if (success) {
+                    out.println("Grupo deletado com sucesso.");
+                } else {
+                    out.println("Falha ao deletar o grupo. Verifique os dados.");
+                }
+            } catch (Exception e) {
+                out.println("Erro ao processar a solicitação de deleção do grupo: " + e.getMessage());
             }
         }
-
-        private void handleSomaDespesa(PrintWriter out)
-        {
-            if(SelectedGroupID != -1) {
-                double total = -1;
-                total = database.TotalDespesas(SelectedGroupID);
-                if (total != -1) {
-                    out.printf("Gastaram: %.2f€\n", total); //formatacao para 2 casas decimais  + euro
-                }
-                else
-                {
-                    out.println("Falha ao encontrar total de despesas");
-                }
-            }
-            else
-            {
-                out.println("Selecione um grupo primeiro!");
-            }
-        }
-
 
 
         private void Resposta(String resposta, PrintWriter out) {
@@ -483,8 +507,6 @@ public class MainServer {
                 out.println(line);
             }
         }
-
-
     }
 }
 
